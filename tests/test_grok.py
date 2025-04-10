@@ -1,9 +1,12 @@
 import json
-import pytest
-import llm
+
 import httpx
+import llm
+import pytest
 from pytest_httpx import HTTPXMock
-from llm_grok import Grok, DEFAULT_MODEL
+
+from llm_grok import DEFAULT_MODEL, Grok
+
 
 @pytest.fixture(autouse=True)
 def ignore_warnings():

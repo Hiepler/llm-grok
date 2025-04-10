@@ -1,9 +1,10 @@
+import json
+from typing import Optional
+
 import click
 import httpx
-import json
 import llm
 from pydantic import Field
-from typing import Optional
 
 AVAILABLE_MODELS = [
     "grok-2-latest",
@@ -16,7 +17,7 @@ def register_models(register):
     for model_id in AVAILABLE_MODELS:
         register(Grok(model_id))
 
-class Grok(llm.Model):
+class Grok(llm.KeyModel):
     can_stream = True
     needs_key = "grok"
     key_env_var = "XAI_API_KEY"
@@ -41,15 +42,15 @@ class Grok(llm.Model):
 
     def build_messages(self, prompt, conversation):
         messages = []
-        
+
         if prompt.system:
             messages.append({"role": "system", "content": prompt.system})
         else:
             messages.append({
-                "role": "system", 
+                "role": "system",
                 "content": "You are Grok, a chatbot inspired by the Hitchhikers Guide to the Galaxy."
             })
-        
+
         if conversation:
             for prev_response in conversation.responses:
                 if prev_response.prompt.system:
