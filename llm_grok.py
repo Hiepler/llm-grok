@@ -15,6 +15,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 console = Console()
 
 AVAILABLE_MODELS = [
+    "grok-code-fast-1",
     "grok-4-latest",
     "grok-3-latest",
     "grok-3-fast-latest",
