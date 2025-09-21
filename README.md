@@ -70,6 +70,9 @@ llm models default grok-3-mini-latest
 The following Grok models are available:
 
 - `grok-4-latest` (default)
+- `grok-4-fast`
+- `grok-4-fast-reasoning-latest`
+- `grok-4-fast-non-reasoning-latest`
 - `grok-code-fast-1`
 - `grok-3-latest`
 - `grok-3-mini-fast-latest`
