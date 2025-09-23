@@ -32,21 +32,21 @@ export XAI_API_KEY="your-api-key-here"
 
 You can now access the Grok model. Run `llm models` to see it in the list.
 
-To run a prompt through `grok-4-latest` (default model):
+To run a prompt through `grok-4-fast` (default model):
 
 ```bash
-llm -m grok-4-latest 'What is the meaning of life, the universe, and everything?'
+llm -m grok-4-fast 'What is the meaning of life, the universe, and everything?'
 ```
 
 To start an interactive chat session:
 
 ```bash
-llm chat -m grok-4-latest
+llm chat -m grok-4-fast
 ```
 
 Example chat session:
 ```
-Chatting with grok-4-latest
+Chatting with grok-4-fast
 Type 'exit' or 'quit' to exit
 Type '!multi' to enter multiple lines, then '!end' to finish
 > Tell me a joke about programming
@@ -55,7 +55,7 @@ Type '!multi' to enter multiple lines, then '!end' to finish
 To use a system prompt to give Grok specific instructions:
 
 ```bash
-cat example.py | llm -m grok-4-latest -s 'explain this code in a humorous way'
+cat example.py | llm -m grok-4-fast -s 'explain this code in a humorous way'
 ```
 
 To set your default model:
@@ -69,7 +69,10 @@ llm models default grok-3-mini-latest
 
 The following Grok models are available:
 
-- `grok-4-latest` (default)
+- `grok-4-latest`
+- `grok-4-fast` (default)
+- `grok-4-fast-reasoning-latest`
+- `grok-4-fast-non-reasoning-latest`
 - `grok-code-fast-1`
 - `grok-3-latest`
 - `grok-3-mini-fast-latest`
@@ -111,27 +114,27 @@ All Grok models support live search functionality to access real-time informatio
 
 Basic usage with options:
 ```bash
-llm -m grok-4-latest -o temperature 0.2 -o max_completion_tokens 50 'Write a haiku about AI'
+llm -m grok-4-fast -o temperature 0.2 -o max_completion_tokens 50 'Write a haiku about AI'
 ```
 
 Using live search to get current information:
 ```bash
-llm -m grok-4-latest -o search_mode on 'What are the latest developments in AI today?'
+llm -m grok-4-fast -o search_mode on 'What are the latest developments in AI today?'
 ```
 
 Searching with date constraints:
 ```bash
-llm -m grok-4-latest -o search_mode on -o search_from_date 2025-01-01 -o search_to_date 2025-01-15 'What happened in AI this month?'
+llm -m grok-4-fast -o search_mode on -o search_from_date 2025-01-01 -o search_to_date 2025-01-15 'What happened in AI this month?'
 ```
 
 Filtering X posts by engagement:
 ```bash
-llm -m grok-4-latest -o search_mode on -o post_favorite_count 1000 -o post_view_count 10000 'Show me popular AI discussions on X'
+llm -m grok-4-fast -o search_mode on -o post_favorite_count 1000 -o post_view_count 10000 'Show me popular AI discussions on X'
 ```
 
 Excluding specific X accounts:
 ```bash
-llm -m grok-4-latest -o search_mode on -o excluded_x_handles "@spam_account" 'Latest AI news from X'
+llm -m grok-4-fast -o search_mode on -o excluded_x_handles "@spam_account" 'Latest AI news from X'
 ```
 
 ## Development
