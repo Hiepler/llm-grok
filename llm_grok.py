@@ -30,7 +30,7 @@ AVAILABLE_MODELS = [
     "grok-2-latest",
     "grok-2-vision-latest",
 ]
-DEFAULT_MODEL = "grok-4-fast"
+DEFAULT_MODEL = "grok-4-1-fast"
 
 
 @llm.hookimpl
