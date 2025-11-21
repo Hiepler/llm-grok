@@ -17,6 +17,9 @@ console = Console()
 AVAILABLE_MODELS = [
     "grok-code-fast-1",
     "grok-4-latest",
+    "grok-4-1-fast",
+    "grok-4-1-fast-reasoning-latest",
+    "grok-4-1-fast-non-reasoning-latest",
     "grok-4-fast",
     "grok-4-fast-reasoning-latest",
     "grok-4-fast-non-reasoning-latest",
@@ -27,7 +30,7 @@ AVAILABLE_MODELS = [
     "grok-2-latest",
     "grok-2-vision-latest",
 ]
-DEFAULT_MODEL = "grok-4-fast"
+DEFAULT_MODEL = "grok-4-1-fast"
 
 
 @llm.hookimpl
