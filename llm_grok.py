@@ -64,6 +64,7 @@ class Grok(llm.KeyModel):
     can_stream = True
     needs_key = "grok"
     key_env_var = "XAI_API_KEY"
+    supports_tools = True
     MAX_RETRIES = 3
     BASE_DELAY = 1  # Base delay in seconds
 
@@ -145,7 +146,43 @@ class Grok(llm.KeyModel):
                 messages.append(
                     {"role": "user", "content": prev_response.prompt.prompt}
                 )
-                messages.append({"role": "assistant", "content": prev_response.text()})
+                # Add tool_results after user message if present
+                if prev_response.prompt.tool_results:
+                    for tool_result in prev_response.prompt.tool_results:
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_result.tool_call_id,
+                            "content": tool_result.content,
+                        })
+                
+                # Add assistant response with tool_calls if present
+                tool_calls = prev_response.tool_calls()
+                content = prev_response.text()
+                assistant_message = {"role": "assistant"}
+                if content is not None:
+                    assistant_message["content"] = content
+                if tool_calls:
+                    assistant_message["tool_calls"] = [
+                        {
+                            "id": tc.id,
+                            "type": "function",
+                            "function": {
+                                "name": tc.name,
+                                "arguments": tc.arguments,
+                            },
+                        }
+                        for tc in tool_calls
+                    ]
+                messages.append(assistant_message)
+
+        # Add tool_results before final user message if present
+        if prompt.tool_results:
+            for tool_result in prompt.tool_results:
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_result.tool_call_id,
+                    "content": tool_result.content,
+                })
 
         messages.append({"role": "user", "content": prompt.prompt})
         return messages
@@ -301,6 +338,20 @@ class Grok(llm.KeyModel):
             
             body["search_parameters"] = search_params
 
+        # Add tools to request body if present
+        if prompt.tools:
+            body["tools"] = [
+                {
+                    "type": "function",
+                    "function": {
+                        "name": tool.name,
+                        "description": tool.description,
+                        "parameters": tool.parameters,
+                    },
+                }
+                for tool in prompt.tools
+            ]
+
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {key}",
@@ -309,6 +360,7 @@ class Grok(llm.KeyModel):
         try:
             if stream:
                 buffer = ""
+                tool_calls_by_index = {}
                 with httpx.Client() as client:
                     with self._make_request(
                         client,
@@ -341,8 +393,38 @@ class Grok(llm.KeyModel):
                                                     content = delta["content"]
                                                     if content:
                                                         yield content
+                                                # Handle tool_calls in streaming response
+                                                if "tool_calls" in delta:
+                                                    for tool_call_delta in delta["tool_calls"]:
+                                                        index = tool_call_delta.get("index")
+                                                        if index is not None:
+                                                            if index not in tool_calls_by_index:
+                                                                tool_calls_by_index[index] = {
+                                                                    "id": "",
+                                                                    "type": "function",
+                                                                    "function": {"name": "", "arguments": ""},
+                                                                }
+                                                            if "id" in tool_call_delta:
+                                                                tool_calls_by_index[index]["id"] = tool_call_delta["id"]
+                                                            if "function" in tool_call_delta:
+                                                                func_delta = tool_call_delta["function"]
+                                                                if "name" in func_delta:
+                                                                    tool_calls_by_index[index]["function"]["name"] = func_delta["name"]
+                                                                if "arguments" in func_delta:
+                                                                    tool_calls_by_index[index]["function"]["arguments"] += func_delta["arguments"]
                                         except json.JSONDecodeError:
                                             continue
+                # Add accumulated tool_calls to response
+                for index in sorted(tool_calls_by_index.keys()):
+                    tc = tool_calls_by_index[index]
+                    if tc["id"] and tc["function"]["name"]:
+                        response.add_tool_call(
+                            llm.ToolCall(
+                                id=tc["id"],
+                                name=tc["function"]["name"],
+                                arguments=tc["function"]["arguments"],
+                            )
+                        )
             else:
                 with httpx.Client() as client:
                     r = self._make_request(
@@ -356,7 +438,19 @@ class Grok(llm.KeyModel):
                     response_data = r.json()
                     response.response_json = response_data
                     if "choices" in response_data and response_data["choices"]:
-                        yield response_data["choices"][0]["message"]["content"]
+                        message = response_data["choices"][0]["message"]
+                        # Parse tool_calls from non-streaming response
+                        if "tool_calls" in message:
+                            for tool_call_data in message["tool_calls"]:
+                                response.add_tool_call(
+                                    llm.ToolCall(
+                                        id=tool_call_data["id"],
+                                        name=tool_call_data["function"]["name"],
+                                        arguments=tool_call_data["function"]["arguments"],
+                                    )
+                                )
+                        if "content" in message:
+                            yield message["content"]
         except httpx.HTTPError as e:
             if (
                 hasattr(e, "response")
