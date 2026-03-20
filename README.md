@@ -94,7 +94,7 @@ llm grok models
 The grok models accept the following options, using `-o name value` syntax:
 
 ### Basic Options
-* `-o temperature 0.7`: The sampling temperature, between 0 and 1. Higher values like 0.8 increase randomness, while lower values like 0.2 make the output more focused and deterministic.
+* `-o temperature 0.7`: The sampling temperature, between 0 and 1 (default: 0.0). Higher values like 0.8 increase randomness, while lower values like 0.2 make the output more focused and deterministic.
 * `-o max_completion_tokens 100`: Maximum number of tokens to generate in the completion (includes both visible tokens and reasoning tokens).
 
 ### Live Search Options
