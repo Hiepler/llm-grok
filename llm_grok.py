@@ -143,18 +143,18 @@ class Grok(llm.KeyModel):
                     messages.append(
                         {"role": "system", "content": prev_response.prompt.system}
                     )
-                messages.append(
-                    {"role": "user", "content": prev_response.prompt.prompt}
-                )
-                # Add tool_results after user message if present
+                # Add tool_results before user message (they belong to the previous turn)
                 if prev_response.prompt.tool_results:
                     for tool_result in prev_response.prompt.tool_results:
                         messages.append({
                             "role": "tool",
                             "tool_call_id": tool_result.tool_call_id,
-                            "content": tool_result.content,
+                            "content": tool_result.output,
                         })
-                
+                messages.append(
+                    {"role": "user", "content": prev_response.prompt.prompt}
+                )
+
                 # Add assistant response with tool_calls if present
                 tool_calls = prev_response.tool_calls()
                 content = prev_response.text()
@@ -164,24 +164,24 @@ class Grok(llm.KeyModel):
                 if tool_calls:
                     assistant_message["tool_calls"] = [
                         {
-                            "id": tc.id,
+                            "id": tc.tool_call_id,
                             "type": "function",
                             "function": {
                                 "name": tc.name,
-                                "arguments": tc.arguments,
+                                "arguments": json.dumps(tc.arguments),
                             },
                         }
                         for tc in tool_calls
                     ]
                 messages.append(assistant_message)
 
-        # Add tool_results before final user message if present
+        # Add tool_results before final user message (they belong to the previous turn)
         if prompt.tool_results:
             for tool_result in prompt.tool_results:
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_result.tool_call_id,
-                    "content": tool_result.content,
+                    "content": tool_result.output,
                 })
 
         messages.append({"role": "user", "content": prompt.prompt})
@@ -346,7 +346,7 @@ class Grok(llm.KeyModel):
                     "function": {
                         "name": tool.name,
                         "description": tool.description,
-                        "parameters": tool.parameters,
+                        "parameters": tool.input_schema,
                     },
                 }
                 for tool in prompt.tools
@@ -420,9 +420,9 @@ class Grok(llm.KeyModel):
                     if tc["id"] and tc["function"]["name"]:
                         response.add_tool_call(
                             llm.ToolCall(
-                                id=tc["id"],
+                                tool_call_id=tc["id"],
                                 name=tc["function"]["name"],
-                                arguments=tc["function"]["arguments"],
+                                arguments=json.loads(tc["function"]["arguments"]),
                             )
                         )
             else:
@@ -444,9 +444,9 @@ class Grok(llm.KeyModel):
                             for tool_call_data in message["tool_calls"]:
                                 response.add_tool_call(
                                     llm.ToolCall(
-                                        id=tool_call_data["id"],
+                                        tool_call_id=tool_call_data["id"],
                                         name=tool_call_data["function"]["name"],
-                                        arguments=tool_call_data["function"]["arguments"],
+                                        arguments=json.loads(tool_call_data["function"]["arguments"]),
                                     )
                                 )
                         if "content" in message:
