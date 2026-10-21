@@ -1,3 +1,4 @@
+import contextlib
 import json
 import sys
 import time
@@ -250,17 +251,30 @@ class Grok(llm.KeyModel):
             "or wait a few minutes before trying again.",
         )
 
+    @contextlib.contextmanager
+    def _stream_request(self, client, method, url, headers, json_data):
+        """Open a streaming request, retrying on 429 responses."""
+        for attempt in range(self.MAX_RETRIES):
+            with client.stream(
+                method, url, headers=headers, json=json_data, timeout=None
+            ) as r:
+                # httpx does not raise on a 429 status: it has to be checked.
+                # On the last attempt the 429 response is handed to the caller,
+                # where raise_for_status() leads to the usual rate limit error.
+                if r.status_code != 429 or attempt >= self.MAX_RETRIES - 1:
+                    yield r
+                    return
+            # Wait (honouring Retry-After) once the connection is closed
+            self._handle_rate_limit(r, attempt)
+
     def _make_request(self, client, method, url, headers, json_data, stream=False):
+        if stream:
+            return self._stream_request(client, method, url, headers, json_data)
         for attempt in range(self.MAX_RETRIES):
             try:
-                if stream:
-                    return client.stream(
-                        method, url, headers=headers, json=json_data, timeout=None
-                    )
-                else:
-                    return client.request(
-                        method, url, headers=headers, json=json_data, timeout=None
-                    )
+                r = client.request(
+                    method, url, headers=headers, json=json_data, timeout=None
+                )
             except httpx.HTTPError as e:
                 if (
                     hasattr(e, "response")
@@ -270,6 +284,13 @@ class Grok(llm.KeyModel):
                     if self._handle_rate_limit(e.response, attempt):
                         continue
                 raise
+            # httpx does not raise on a 429 status: it has to be checked.
+            # On the last attempt the 429 response is returned to the caller,
+            # where raise_for_status() leads to the usual rate limit error.
+            if r.status_code == 429 and attempt < self.MAX_RETRIES - 1:
+                self._handle_rate_limit(r, attempt)
+                continue
+            return r
 
     def execute(self, prompt, stream, response, conversation, key=None):
         key = self.get_key(key)

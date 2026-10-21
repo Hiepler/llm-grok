@@ -5,7 +5,7 @@ import llm
 import pytest
 from pytest_httpx import HTTPXMock
 
-from llm_grok import DEFAULT_MODEL, Grok, GrokError
+from llm_grok import DEFAULT_MODEL, Grok, GrokError, RateLimitError
 
 
 @pytest.fixture(autouse=True)
@@ -313,6 +313,89 @@ def test_stream_parsing_error(model, httpx_mock: HTTPXMock):
     response = model.prompt("Test message", stream=True)
     chunks = list(response)
     assert chunks == []
+
+
+URL = "https://api.x.ai/v1/chat/completions"
+
+
+@pytest.fixture
+def sleeps(monkeypatch):
+    """Record the sleeps requested by the rate limit handling instead of waiting."""
+    recorded = []
+    monkeypatch.setattr("llm_grok.time.sleep", recorded.append)
+    return recorded
+
+
+def add_rate_limited(httpx_mock: HTTPXMock, times, headers=None):
+    for _ in range(times):
+        httpx_mock.add_response(
+            method="POST",
+            url=URL,
+            status_code=429,
+            headers=headers or {},
+            json={"error": {"message": "Too many requests"}},
+        )
+
+
+def stream_body(text):
+    event = {"choices": [{"delta": {"content": text}}]}
+    return f"data: {json.dumps(event)}\n\ndata: [DONE]\n\n".encode()
+
+
+def test_rate_limit_honours_retry_after(model, mock_response, httpx_mock, sleeps):
+    add_rate_limited(httpx_mock, 1, headers={"Retry-After": "2"})
+    httpx_mock.add_response(method="POST", url=URL, json=mock_response)
+
+    assert model.prompt("Test message", stream=False).text() == "Test response"
+
+    assert len(httpx_mock.get_requests()) == 2
+    assert sum(sleeps) == 2
+
+
+def test_rate_limit_backs_off_without_retry_after(
+    model, mock_response, httpx_mock, sleeps
+):
+    add_rate_limited(httpx_mock, 2)
+    httpx_mock.add_response(method="POST", url=URL, json=mock_response)
+
+    assert model.prompt("Test message", stream=False).text() == "Test response"
+
+    assert len(httpx_mock.get_requests()) == 3
+    # BASE_DELAY * 2**attempt: 1s then 2s
+    assert sum(sleeps) == Grok.BASE_DELAY * (1 + 2)
+
+
+def test_rate_limit_retries_are_exhausted(model, httpx_mock, sleeps):
+    add_rate_limited(httpx_mock, Grok.MAX_RETRIES, headers={"Retry-After": "1"})
+
+    with pytest.raises(RateLimitError):
+        model.prompt("Test message", stream=False).text()
+
+    assert len(httpx_mock.get_requests()) == Grok.MAX_RETRIES
+
+
+def test_rate_limit_retried_when_streaming(model, httpx_mock, sleeps):
+    add_rate_limited(httpx_mock, 1, headers={"Retry-After": "1"})
+    httpx_mock.add_response(
+        method="POST",
+        url=URL,
+        headers={"content-type": "text/event-stream"},
+        content=stream_body("Test response"),
+    )
+
+    assert "".join(model.prompt("Test message", stream=True)) == "Test response"
+
+    assert len(httpx_mock.get_requests()) == 2
+    assert sum(sleeps) == 1
+
+
+def test_rate_limit_retries_are_exhausted_when_streaming(model, httpx_mock, sleeps):
+    add_rate_limited(httpx_mock, Grok.MAX_RETRIES, headers={"Retry-After": "1"})
+
+    with pytest.raises(RateLimitError):
+        "".join(model.prompt("Test message", stream=True))
+
+    assert len(httpx_mock.get_requests()) == Grok.MAX_RETRIES
 
 
 def test_live_search_auto_mode(model, mock_response, httpx_mock: HTTPXMock):
