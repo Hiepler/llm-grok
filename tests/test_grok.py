@@ -190,6 +190,36 @@ def test_streaming_request(model, httpx_mock: HTTPXMock):
     assert "".join(chunks) == "Test response"
 
 
+def test_streaming_multibyte_character_split_across_chunks(model, httpx_mock: HTTPXMock):
+    """A multi-byte UTF-8 character may be split across network chunks."""
+    text = "caf\u00e9 \U0001F600 done"
+    event = (
+        "data: "
+        + json.dumps({"choices": [{"delta": {"content": text}}]}, ensure_ascii=False)
+        + "\n\n"
+    ).encode()
+    # Split inside the 2-byte "e acute" and inside the 4-byte emoji
+    cut_accent = event.index("\u00e9".encode()) + 1
+    cut_emoji = event.index("\U0001F600".encode()) + 2
+
+    class SplitChunks(httpx.SyncByteStream):
+        def __iter__(self):
+            yield event[:cut_accent]
+            yield event[cut_accent:cut_emoji]
+            yield event[cut_emoji:] + b"data: [DONE]\n\n"
+
+    httpx_mock.add_response(
+        method="POST",
+        url="https://api.x.ai/v1/chat/completions",
+        status_code=200,
+        headers={"content-type": "text/event-stream"},
+        stream=SplitChunks(),
+    )
+
+    response = model.prompt("Test message", stream=True)
+    assert "".join(response) == text
+
+
 def test_temperature_option(model, mock_response, httpx_mock: HTTPXMock):
     expected_request = {
         "model": DEFAULT_MODEL,

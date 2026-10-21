@@ -371,9 +371,11 @@ class Grok(llm.KeyModel):
                         stream=True,
                     ) as r:
                         r.raise_for_status()
-                        for chunk in r.iter_raw():
+                        # iter_text() decodes incrementally, so a multi-byte
+                        # character split across network chunks is not lost.
+                        for chunk in r.iter_text():
                             if chunk:
-                                buffer += chunk.decode("utf-8")
+                                buffer += chunk
                                 while "\n\n" in buffer:
                                     message, buffer = buffer.split("\n\n", 1)
                                     if message.startswith("data: "):
